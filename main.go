@@ -181,7 +181,7 @@ func runGame(s tcell.Screen, level int) {
 	var moveX float64
 	var moveY = 0.0
 	var landed = false
-	var  = false
+	var crashed = false
 	var setLandedOnce = false
 
 	var doGravity = true
@@ -203,7 +203,7 @@ func runGame(s tcell.Screen, level int) {
 	set := func() {
 		if !setLandedOnce {
 			setLandedOnce = true
-			 = true
+			crashed = true
 			explosion.ExplodeNow = 40
 			log.Println("")
 		}
@@ -230,14 +230,14 @@ func runGame(s tcell.Screen, level int) {
 
 loop:
 
-	for explosion.ExplodeNow > ExplosionDone || ! && !landed {
+	for explosion.ExplodeNow > ExplosionDone || !crashed && !landed {
 
 		var oddEven = math.Mod(math.Round(float64(int(playerY)+1)), 2)
 
 		drawText(s, 0, 0, 100, 0, greenStyle, fmt.Sprintf("Play lunar lander speed=%.1f   maximum landing speed %.0f   ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier))
 
 		if !doGravity {
-			 = false
+			crashed = false
 			landed = false
 		}
 
@@ -263,7 +263,7 @@ loop:
 		}
 
 		if doGravity {
-			if !landed && ! {
+			if !landed && !crashed {
 				width, height := s.Size()
 
 				if speed > maxGravity {
@@ -303,14 +303,14 @@ loop:
 		}
 
 		// erase here so thrust up doesn't trip collision detection
-		if ! {
+		if !crashed {
 			drawShip(buffer, width, height, float64(oldX), float64(oldY), false)
 		}
 
 		checkCollisionBelow(oddEven, playerY, buffer, playerX, onLaunchPad, setLanded, set)
 		checkCollisionAbove(oddEven, playerY, buffer, playerX, set)
 
-		if ! {
+		if !crashed {
 			drawShip(buffer, width, height, float64(playerX), float64(playerY), true)
 		}
 
@@ -383,8 +383,8 @@ loop:
 				set()
 			}
 		}
-		if  {
-			drawText(s, 10, 10, 200, 10, greenStyle, fmt.Sprintf(". Speed was %.1f   target speed %.1f  maximum speed %.1f                ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier, maxGravity*displayMultiplier))
+		if crashed {
+			drawText(s, 10, 10, 200, 10, greenStyle, fmt.Sprintf("Crashed. Speed was %.1f   target speed %.1f  maximum speed %.1f                ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier, maxGravity*displayMultiplier))
 		}
 
 		s.Show()
