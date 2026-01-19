@@ -113,6 +113,38 @@ func main() {
 	}
 	s.Clear()
 	var end = false
+
+	width, _ := s.Size()
+	startX := width
+
+	click := 0.0
+	pixels := getLogoPixels("Bernie soft")
+	for !end {
+		click++
+		if math.Mod(click, 200000) == 0 {
+			s.Clear()
+			drawLogo(s, startX, pixels)
+			s.Show()
+			startX -= 1
+			if startX < -80 {
+				startX = width
+			}
+			log.Print("Moved logo to ", startX)
+		}
+		select {
+		case ev := <-s.EventQ():
+			switch ev := ev.(type) {
+			case *tcell.EventKey:
+				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
+					end = true
+				}
+			}
+		default:
+		}
+	}
+	s.Clear()
+	drawLogo(s, 0, pixels)
+	end = false
 	for !end {
 		end = runMenu(s, title, menu)
 	}
@@ -159,7 +191,7 @@ func runGame(s tcell.Screen, level int) {
 	log.Println("Begin game loop")
 
 	drawRunesToScreen(buffer, s, styles)
-	// 0.0021 0.000336
+
 	var targetGravity = 0.0000017
 	var gravity = targetGravity
 	var gravityIncrease = targetGravity / float64(height) * 0.0005
@@ -169,12 +201,9 @@ func runGame(s tcell.Screen, level int) {
 	var speed = 0.0
 	var maxSpeed = maxGravity * 2
 
-	var maximumLandingSpeed = maxSpeed / 8
+	var maximumLandingSpeed = maxSpeed / 4 // 0.00100 // maxSpeed / 8
 	const displayMultiplier = 100000.0
 
-	// log.Println("XXXXXXXXX FRED gravity/maxSpeed", gravity, maxSpeed)
-	// aWidth, aHeight := s.Size()
-	// log.Printf("XXXXXXXX   Screen size %d x %d\n", aWidth, aHeight)
 	var shouldReturn bool
 	var thrust = false
 	var displayThrust = 0
@@ -184,6 +213,7 @@ func runGame(s tcell.Screen, level int) {
 	var crashed = false
 	var setLandedOnce = false
 
+	// easier for debugging without gravity
 	var doGravity = true
 
 	var explosion = Explosion{

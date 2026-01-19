@@ -48,7 +48,7 @@ func landscapeSinHard(width int, height int, buffer [][]byte, landingList []Land
 		drawLine(buffer, width, height, float64(oldX), float64(oldY), float64(x), float64(y), GREEN, true)
 		oldX = x
 		oldY = y
-		if int(y) != currentLandingEntry.Y && float64(x) > float64(width)*1.5 {
+		if int(y) != currentLandingEntry.Y && float64(x) > float64(width)*1.3 {
 			if currentLandingEntry.Points > 6 {
 				currentLandingEntry.End = x - 1
 				landingList = append(landingList, currentLandingEntry)
