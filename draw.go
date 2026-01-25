@@ -19,8 +19,14 @@ func drawLine(xRunes [][]byte, width, height int, x1, y1, x2, y2 float64, colour
 		y1 = y2
 		y2 = swap
 	}
-	stepY := 2 / (y2 - y1)
-	stepX := 4 / (x2 - x1)
+	lineWidth := x2 - x1
+	lineHeight := y2 - y1
+	stepY := lineHeight / lineWidth
+	stepX := 1.0
+	if lineHeight > lineWidth {
+		stepX = lineWidth / lineHeight
+		stepY = 1.0
+	}
 	if x1 == x2 {
 		stepX = 0
 	}
