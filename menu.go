@@ -16,7 +16,9 @@ func displayMenu(s tcell.Screen, x, y int, title string, items []MenuItem, selec
 	styleSelected := tcell.StyleDefault.Foreground(color.Black).
 		Background(color.Green)
 
-	width, height := s.Size()
+	width, _ := s.Size()
+	y = 6
+
 	biggestItem := 0
 	for _, item := range items {
 		if len(item.Label) > biggestItem {
@@ -26,7 +28,7 @@ func displayMenu(s tcell.Screen, x, y int, title string, items []MenuItem, selec
 	boxWidth := biggestItem + 8
 	boxHeight := len(items) + 8
 	boxX := (width - boxWidth) / 2
-	boxY := (height - boxHeight) / 2
+	boxY := (y - boxHeight/4)
 
 	for row := 0; row < boxHeight; row++ {
 		for col := 0; col < boxWidth; col++ {

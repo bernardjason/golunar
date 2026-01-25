@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"time"
 
 	"github.com/gdamore/tcell/v3"
 	"github.com/gdamore/tcell/v3/color"
@@ -18,8 +19,11 @@ const BLUE = 4 << 4
 
 const instructions = `Welcome to Lunar Lander!
 
-Use the left and right arrow keys to control your lander's thrusters.
-Your goal is to land safely on the moon's surface without crashing.
+Use the left and right arrow keys to control your lander's.
+Up arrow fires thruster. Press shift with left right also fires thrusters.
+Avoid the meteors!
+Your goal is to land safely on the moon's surface without crashing and as
+much fuel as possible.
 
 Press Enter or Escape to return to the main menu.`
 
@@ -31,6 +35,7 @@ type ExplodeXY struct {
 	TTL        float64
 }
 type Explosion struct {
+	MeteorHit  bool
 	ExplodeNow int64
 	XY         []ExplodeXY
 }
@@ -45,22 +50,24 @@ func Debug(format string, args ...any) {
 }
 
 func main() {
-	file, err := os.OpenFile(
-		"app.log",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
-		0644,
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		err := file.Close()
+	if !IsWASM {
+		file, err := os.OpenFile(
+			"app.log",
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+			0644,
+		)
 		if err != nil {
-			fmt.Println("Problem closing log file", err)
+			log.Fatal(err)
 		}
-	}()
+		defer func() {
+			err := file.Close()
+			if err != nil {
+				fmt.Println("Problem closing log file", err)
+			}
+		}()
 
-	log.SetOutput(file)
+		log.SetOutput(file)
+	}
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
 	tcell.SetEncodingFallback(tcell.EncodingFallbackASCII)
@@ -111,6 +118,14 @@ func main() {
 			},
 		},
 	}
+	if IsWASM {
+		for i := range menu {
+			if menu[i].Label == "Quit" {
+				menu = append(menu[:i], menu[i+1:]...)
+				break
+			}
+		}
+	}
 	s.Clear()
 	var end = false
 
@@ -118,37 +133,60 @@ func main() {
 	startX := width
 
 	click := 0.0
-	pixels := getLogoPixels("Bernie soft")
+	var targetFps int64 = 30
+
+	startTime := time.Now()
+
+	pixels := getLogoPixels("BERNIESOFT")
+
 	for !end {
+
 		click++
-		if math.Mod(click, 200000) == 0 {
-			s.Clear()
-			drawLogo(s, startX, pixels)
-			s.Show()
-			startX -= 1
-			if startX < -80 {
-				startX = width
-			}
+		s.Clear()
+		drawLogo(s, startX, pixels)
+		s.Show()
+		startX -= 1
+		if startX < -200 {
+			startX = width
 			log.Print("Moved logo to ", startX)
 		}
+
 		select {
 		case ev := <-s.EventQ():
-			switch ev := ev.(type) {
+			switch ev.(type) {
 			case *tcell.EventKey:
-				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC {
-					end = true
-				}
+				end = true
 			}
 		default:
 		}
+		checkAverageFps(startTime, click, targetFps)
 	}
 	s.Clear()
-	drawLogo(s, 0, pixels)
+	drawLogo(s, startX, pixels)
+
 	end = false
 	for !end {
 		end = runMenu(s, title, menu)
+		// is WASM don't allow quit from menu
+		if IsWASM {
+			end = false
+		}
+		checkAverageFps(startTime, click, targetFps)
 	}
 
+}
+
+func checkAverageFps(startTime time.Time, click float64, targetFps int64) {
+	if click > 0 {
+		now := time.Now()
+		averageFrameTimeInMicroSeconds := now.Sub(startTime).Microseconds() / int64(click)
+
+		Debug("Average frame time %.2f microseconds over %d clicks\n", float64(averageFrameTimeInMicroSeconds), int(click))
+		if averageFrameTimeInMicroSeconds < time.Second.Microseconds()/(targetFps) {
+			pause := time.Duration((time.Second.Microseconds()/(targetFps) - averageFrameTimeInMicroSeconds)) * time.Microsecond
+			time.Sleep(pause)
+		}
+	}
 }
 
 func runGame(s tcell.Screen, level int) {
@@ -181,7 +219,8 @@ func runGame(s tcell.Screen, level int) {
 	if level == 0 {
 		landingList = landscapeSin(width, height, buffer, landingList)
 	} else {
-		landingList = landscapeSinHard(width, height, buffer, landingList)
+		// landingList = landscapeSinHard(width, height, buffer, landingList)
+		landingList = landscapeHard(width, height, buffer, landingList)
 	}
 
 	log.Printf("Landing points %v\n", landingList)
@@ -192,14 +231,17 @@ func runGame(s tcell.Screen, level int) {
 
 	drawRunesToScreen(buffer, s, styles)
 
-	var targetGravity = 0.0000017
+	var targetGravity = 0.000017
 	var gravity = targetGravity
-	var gravityIncrease = targetGravity / float64(height) * 0.0005
+	var gravityIncrease = targetGravity / float64(height) * 0.005
 	var maxGravity = gravity * float64(height) / 2 * 50
-	var speedChangeThrust = maxGravity * 0.07
+	var speedChangeThrust = maxGravity * 0.01
+	var fuel = 100.0
+	var hits = 0
+	const permittedHits = 3
 
 	var speed = 0.0
-	var maxSpeed = maxGravity * 2
+	var maxSpeed = maxGravity
 
 	var maximumLandingSpeed = maxSpeed / 4 // 0.00100 // maxSpeed / 8
 	const displayMultiplier = 100000.0
@@ -220,7 +262,7 @@ func runGame(s tcell.Screen, level int) {
 		ExplodeNow: 0,
 		XY:         []ExplodeXY{},
 	}
-	const ExplosionDone = -200
+	var ExplosionDone int64 = -200
 	const ExplodeBy = 0.05
 	explosionDirection := [...]ExplodeXY{
 		{X: 0, Y: 0, DirX: ExplodeBy, DirY: ExplodeBy},
@@ -230,11 +272,12 @@ func runGame(s tcell.Screen, level int) {
 	}
 	explosionDirectionIndex := 0
 
-	set := func() {
+	setCrashed := func() {
 		if !setLandedOnce {
 			setLandedOnce = true
 			crashed = true
 			explosion.ExplodeNow = 40
+			explosion.MeteorHit = false
 			log.Println("")
 		}
 	}
@@ -245,7 +288,7 @@ func runGame(s tcell.Screen, level int) {
 				log.Println("Landed well done")
 				landed = true
 			} else {
-				set()
+				setCrashed()
 			}
 		}
 	}
@@ -258,13 +301,20 @@ func runGame(s tcell.Screen, level int) {
 		return false
 	}
 
+	clearMeteors()
+	startTime := time.Now()
+	var targetFps int64 = 60
+	click := 0.0
 loop:
 
 	for explosion.ExplodeNow > ExplosionDone || !crashed && !landed {
 
+		click++
 		var oddEven = math.Mod(math.Round(float64(int(playerY)+1)), 2)
 
-		drawText(s, 0, 0, 100, 0, greenStyle, fmt.Sprintf("Play lunar lander speed=%.1f   maximum landing speed %.0f   ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier))
+		drawText(s, 0, 0, 100, 0, greenStyle, fmt.Sprintf("Play lunar lander speed=%.1f maximum landing speed %.0f fuel %0.f hits %d   ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier, fuel, hits))
+
+		updateMeteors()
 
 		if !doGravity {
 			crashed = false
@@ -313,7 +363,8 @@ loop:
 					playerX, playerY = oldX, oldY
 				}
 
-				if thrust {
+				if fuel > 0 && thrust {
+					fuel = fuel - 0.5
 					speed = speed - speedChangeThrust
 					gravity = 0 //gravity * 0.5
 					if speed < -maxSpeed {
@@ -329,7 +380,7 @@ loop:
 		}
 
 		if playerY >= float64(height*2)-2 || playerY <= 2 {
-			set()
+			setCrashed()
 		}
 
 		// erase here so thrust up doesn't trip collision detection
@@ -337,8 +388,16 @@ loop:
 			drawShip(buffer, width, height, float64(oldX), float64(oldY), false)
 		}
 
-		checkCollisionBelow(oddEven, playerY, buffer, playerX, onLaunchPad, setLanded, set)
-		checkCollisionAbove(oddEven, playerY, buffer, playerX, set)
+		checkCollisionBelow(oddEven, playerY, buffer, playerX, onLaunchPad, setLanded, setCrashed)
+		checkCollisionAbove(oddEven, playerY, buffer, playerX, setCrashed)
+		if checkForMeteorCollision(playerX, playerY) {
+			explosion.ExplodeNow = 10
+			explosion.MeteorHit = true
+			hits++
+			if hits >= permittedHits {
+				setCrashed()
+			}
+		}
 
 		if !crashed {
 			drawShip(buffer, width, height, float64(playerX), float64(playerY), true)
@@ -346,55 +405,50 @@ loop:
 
 		drawRunesToScreen(buffer, s, styles)
 
+		drawMeteors(s)
+
+		// handleExplosion(explosion, buffer, width, ExplosionDone, height)
 		if explosion.ExplodeNow > 0 {
 			log.Println("Explosion step", explosion.ExplodeNow)
 			explosionDirectionIndex = int(math.Mod(float64(explosionDirectionIndex+1), float64(len(explosionDirection))))
 
-			explosion.XY = append(explosion.XY, ExplodeXY{
-				X:    playerX,
-				Y:    playerY,
+			toAdd := ExplodeXY{
+				X:    playerX / 2,
+				Y:    playerY / 2,
 				DirX: explosionDirection[explosionDirectionIndex].DirX * (math.Mod(rand.Float64(), 1.0)),
 				DirY: explosionDirection[explosionDirectionIndex].DirY * (math.Mod(rand.Float64(), 1.0)),
 				TTL:  math.Mod(rand.Float64()*1000, 500) + 100,
-			})
+			}
+			if explosion.MeteorHit {
+				toAdd.X = toAdd.X + toAdd.DirX/toAdd.DirX*2
+				toAdd.Y = toAdd.Y + toAdd.DirY/toAdd.DirY*2
+			}
+
+			explosion.XY = append(explosion.XY, toAdd)
 			log.Println("Added explosion part", len(explosion.XY))
 		}
 
 		for i := range explosion.XY {
 			update := &explosion.XY[i]
-			bufferIndexX := int(update.X / 2)
-			bufferIndexY := int(update.Y / 2)
-			if update.TTL > 0 && update.Y > 0 && bufferIndexY < len(buffer) && bufferIndexX >= 0 && bufferIndexX < width {
-				if buffer[bufferIndexY] == nil {
-					buffer[bufferIndexY] = make([]byte, width)
-				}
-
-				buffer[bufferIndexY][bufferIndexX] = 0
-				update.TTL--
-				Debug("Update explosion", i, update.X, update.Y, update.DirX, update.DirY)
-				update.X = update.X + update.DirX
-				update.Y = update.Y + update.DirY
-				bufferIndexX := int(update.X / 2)
-				bufferIndexY := int(update.Y / 2)
-				if bufferIndexY < len(buffer) && bufferIndexX >= 0 && bufferIndexX < width {
-					if buffer[bufferIndexY] == nil {
-						buffer[bufferIndexY] = make([]byte, width)
-					}
-					buffer[bufferIndexY][bufferIndexX] = 15 | RED
-					Debug("Added buffer entry", bufferIndexY, update.X, buffer[bufferIndexY][bufferIndexX])
-				}
+			s.SetContent(int(update.X), int(update.Y), ' ', nil, tcell.StyleDefault.Foreground(color.Red).Background(color.Black))
+			update.X = update.X + update.DirX
+			update.Y = update.Y + update.DirY
+			update.TTL--
+			if update.TTL <= 0 {
+				update.X = -1
+				update.Y = -1
 			}
+			s.SetContent(int(update.X), int(update.Y), '*', nil, tcell.StyleDefault.Foreground(color.Red).Background(color.Black))
 		}
-		explosion.ExplodeNow--
+
 		if explosion.ExplodeNow <= ExplosionDone {
 			for i := range explosion.XY {
 				update := &explosion.XY[i]
-				if update.Y >= 0 && update.Y < float64(height) {
-					buffer[int(update.Y/2)][int(update.X/2)] = 0
-				}
+				s.SetContent(int(update.X), int(update.Y), ' ', nil, tcell.StyleDefault.Foreground(color.Red).Background(color.Black))
 			}
 			explosion.XY = []ExplodeXY{}
 		}
+		explosion.ExplodeNow--
 
 		if displayThrust > 0 || !doGravity {
 
@@ -408,16 +462,56 @@ loop:
 
 		if landed {
 			if speed < maximumLandingSpeed {
-				drawText(s, 10, 10, 200, 10, greenStyle, fmt.Sprintf("Well done. Speed was %.1f   target=%.1f  maximum speed %0.1f           ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier, maxGravity*displayMultiplier))
+				score := (fuel + 1) / (speed + 1) / float64(hits+1)
+				drawText(s, 5, 10, 200, 10, greenStyle, fmt.Sprintf("Well done. Score %0.f speed was %.1f fuel %0.f hits %d ", score, speed*displayMultiplier, fuel, hits))
 			} else {
-				set()
+				setCrashed()
 			}
 		}
 		if crashed {
-			drawText(s, 10, 10, 200, 10, greenStyle, fmt.Sprintf("Crashed. Speed was %.1f   target speed %.1f  maximum speed %.1f                ", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier, maxGravity*displayMultiplier))
+			drawText(s, 5, 10, 200, 10, greenStyle, fmt.Sprintf("Crashed. Speed was %.1f target speed %.1f fuel %0.f hits %d", speed*displayMultiplier, maximumLandingSpeed*displayMultiplier, fuel, hits))
 		}
 
 		s.Show()
+		checkAverageFps(startTime, click, targetFps)
+	}
+}
+
+func handleExplosion(explosion Explosion, buffer [][]byte, width int, ExplosionDone int64, height int) {
+	for i := range explosion.XY {
+		update := &explosion.XY[i]
+		bufferIndexX := int(update.X / 2)
+		bufferIndexY := int(update.Y / 2)
+		if update.TTL > 0 && update.Y > 0 && bufferIndexY < len(buffer) && bufferIndexX >= 0 && bufferIndexX < width {
+			if buffer[bufferIndexY] == nil {
+				buffer[bufferIndexY] = make([]byte, width)
+			}
+
+			buffer[bufferIndexY][bufferIndexX] = 0
+			update.TTL--
+			Debug("Update explosion", i, update.X, update.Y, update.DirX, update.DirY)
+			update.X = update.X + update.DirX
+			update.Y = update.Y + update.DirY
+			bufferIndexX := int(update.X / 2)
+			bufferIndexY := int(update.Y / 2)
+			if bufferIndexY < len(buffer) && bufferIndexX >= 0 && bufferIndexX < width {
+				if buffer[bufferIndexY] == nil {
+					buffer[bufferIndexY] = make([]byte, width)
+				}
+				buffer[bufferIndexY][bufferIndexX] = 15 | RED
+				Debug("Added buffer entry", bufferIndexY, update.X, buffer[bufferIndexY][bufferIndexX])
+			}
+		}
+	}
+
+	if explosion.ExplodeNow <= ExplosionDone {
+		for i := range explosion.XY {
+			update := &explosion.XY[i]
+			if update.Y >= 0 && update.Y < float64(height) && int(update.X/2) >= 0 && int(update.X/2) < width {
+				buffer[int(update.Y/2)][int(update.X/2)] = 0
+			}
+		}
+		explosion.XY = []ExplodeXY{}
 	}
 }
 
@@ -457,7 +551,7 @@ func removePreviousThrust(oldY float64, oldX float64, s tcell.Screen, thrustStyl
 	s.SetContent(thrustX+1, thrustY, ' ', nil, thrustStyle)
 }
 
-func checkCollisionAbove(oddEven float64, playerY float64, buffer [][]byte, playerX float64, set func()) {
+func checkCollisionAbove(oddEven float64, playerY float64, buffer [][]byte, playerX float64, setCrashed func()) {
 	var yi int
 	if oddEven == 0 {
 		yi = int(int(playerY-2) / 2)
@@ -470,20 +564,18 @@ func checkCollisionAbove(oddEven float64, playerY float64, buffer [][]byte, play
 		if oddEven == 0 {
 			singleByte = buffer[yi][int(playerX/2)] & 3
 			if singleByte != 0 {
-				log.Println("!!!!!!!!!!! 1", buffer[yi][int(playerX/2)])
-				set()
+				setCrashed()
 			}
 		} else {
 			singleByte = buffer[yi][int(playerX/2)] & 12
 			if singleByte != 0 {
-				log.Println("!!!!!!!!!!! 2", buffer[yi][int(playerX/2)])
-				set()
+				setCrashed()
 			}
 		}
 	}
 }
 
-func checkCollisionBelow(oddEven float64, playerY float64, buffer [][]byte, playerX float64, onLaunchPad func(playerX float64, playerY float64) bool, setLanded func(), set func()) {
+func checkCollisionBelow(oddEven float64, playerY float64, buffer [][]byte, playerX float64, onLaunchPad func(playerX float64, playerY float64) bool, setLanded func(), setCrashed func()) {
 	var yi int
 	if oddEven == 1 {
 		yi = int(int(playerY) / 2)
@@ -499,7 +591,7 @@ func checkCollisionBelow(oddEven float64, playerY float64, buffer [][]byte, play
 				if singleByte == 12 && onLaunchPad(playerX, playerY) {
 					setLanded()
 				} else {
-					set()
+					setCrashed()
 				}
 			}
 		} else {
@@ -508,7 +600,7 @@ func checkCollisionBelow(oddEven float64, playerY float64, buffer [][]byte, play
 				if singleByte == 3 && onLaunchPad(playerX, playerY) {
 					setLanded()
 				} else {
-					set()
+					setCrashed()
 				}
 			}
 		}
