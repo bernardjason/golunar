@@ -29,7 +29,7 @@ func getLogoPixels(logo string) []*image.RGBA {
 	return returnPixels
 }
 
-func drawLogo(s tcell.Screen, startX int, pixels []*image.RGBA) {
+func drawLogo(s tcell.Screen, startX int, pixels []*image.RGBA) bool {
 
 	_, startY := s.Size()
 	startY = startY / 10
@@ -52,6 +52,10 @@ func drawLogo(s tcell.Screen, startX int, pixels []*image.RGBA) {
 		}
 		x += charPixels.Bounds().Dx() + 2
 	}
+	if x < 0 {
+		return true
+	}
+	return false
 }
 
 //go:embed Roboto-Regular.ttf
