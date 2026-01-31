@@ -75,6 +75,10 @@ func runInstructions(s tcell.Screen, title, instructions string) {
 
 		ev := <-s.EventQ()
 		switch ev := ev.(type) {
+		case *tcell.EventResize:
+			s.Sync()
+			s.Clear()
+			continue
 		case *tcell.EventKey:
 
 			switch ev.Key() {
