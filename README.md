@@ -13,6 +13,8 @@ Check your landing speed against actual speed.
 - **Terminal UI**: Beautiful text-based graphics using tcell
 - **Interactive Menu System**: Easy navigation between game modes and instructions
 
+[![YouTube](https://i9.ytimg.com/vi_webp/f8Lphefq4Hc/mq2.webp?sqp=CJi6_MsG-oaymwEmCMACELQB8quKqQMa8AEB-AG2CIAC0AWKAgwIABABGCAgZSgdMA8=&rs=AOn4CLCfH7I45E28J0JSj06T6CmDytyMnA)](https://youtu.be/f8Lphefq4Hc)
+
 ## Gameplay
 
 ### Controls
