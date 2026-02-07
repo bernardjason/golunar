@@ -37,6 +37,15 @@ The controls are a compromise as you cannot detect key press and release events 
 - Conserve fuel to maximize your score
 - Survive all difficulty levels
 
+## Install
+
+If you already have go instaled you can just run
+```
+go install github.com/bernardjason/golunar@latest
+golunar
+```
+to install and run
+
 ## Building
 
 ### Prerequisites
