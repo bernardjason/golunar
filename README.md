@@ -42,7 +42,7 @@ The controls are a compromise as you cannot detect key press and release events 
 If you already have go instaled you can just run
 ```
 go install github.com/bernardjason/golunar@latest
-golunar
+go lunar
 ```
 to install and run
 
