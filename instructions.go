@@ -8,8 +8,9 @@ import (
 )
 
 func displayInstructions(s tcell.Screen, x, y int, title string, items []string) {
-	styleTitle := tcell.StyleDefault.Foreground(color.Yellow)
-	styleNormal := tcell.StyleDefault.Foreground(color.White)
+	styleTitle := tcell.StyleDefault.Foreground(color.Yellow).Background(color.Black)
+	styleNormal := tcell.StyleDefault.Foreground(color.White).Background(color.Black)
+	styleBorder := tcell.StyleDefault.Foreground(color.White).Background(color.Black)
 
 	width, height := s.Size()
 	biggestItem := 0
@@ -48,7 +49,7 @@ func displayInstructions(s tcell.Screen, x, y int, title string, items []string)
 			} else if row == boxHeight-1 && col == boxWidth-1 {
 				ch = 0x258c
 			}
-			s.SetContent(boxX+col, boxY+row, ch, nil, tcell.StyleDefault.Foreground(color.White))
+			s.SetContent(boxX+col, boxY+row, ch, nil, styleBorder)
 		}
 	}
 	drawTextCentre(s, width, y, styleTitle, title)

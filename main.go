@@ -82,6 +82,10 @@ func main() {
 		log.Fatalf("%+v", err)
 	}
 
+	// Do not inherit the terminal's background colour. Some terminals use a
+	// light default background, while the game graphics are drawn on black.
+	s.SetStyle(tcell.StyleDefault.Foreground(color.White).Background(color.Black))
+
 	quit := func() {
 		maybePanic := recover()
 		s.Fini()
@@ -195,7 +199,7 @@ func checkAverageFps(startTime time.Time, click float64, targetFps int64) {
 }
 
 func runGame(s tcell.Screen, level int) {
-	defStyle := tcell.StyleDefault.Background(color.Reset).Foreground(color.Reset)
+	defStyle := tcell.StyleDefault.Background(color.Black).Foreground(color.White)
 
 	greenStyle := tcell.StyleDefault.Foreground(color.Green).Background(color.Black)
 

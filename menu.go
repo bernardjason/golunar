@@ -11,10 +11,11 @@ type MenuItem struct {
 }
 
 func displayMenu(s tcell.Screen, x, y int, title string, items []MenuItem, selected int) {
-	styleTitle := tcell.StyleDefault.Foreground(color.Yellow)
-	styleNormal := tcell.StyleDefault.Foreground(color.White)
+	styleTitle := tcell.StyleDefault.Foreground(color.Yellow).Background(color.Black)
+	styleNormal := tcell.StyleDefault.Foreground(color.White).Background(color.Black)
 	styleSelected := tcell.StyleDefault.Foreground(color.Black).
 		Background(color.Green)
+	styleBorder := tcell.StyleDefault.Foreground(color.White).Background(color.Black)
 
 	width, _ := s.Size()
 	y = 6
@@ -55,7 +56,7 @@ func displayMenu(s tcell.Screen, x, y int, title string, items []MenuItem, selec
 			} else if row == boxHeight-1 && col == boxWidth-1 {
 				ch = 0x258c
 			}
-			s.SetContent(boxX+col, boxY+row, ch, nil, tcell.StyleDefault.Foreground(color.White))
+			s.SetContent(boxX+col, boxY+row, ch, nil, styleBorder)
 		}
 	}
 	drawTextCentre(s, width, y, styleTitle, title)
